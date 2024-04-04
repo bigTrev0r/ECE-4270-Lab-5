@@ -352,10 +352,22 @@ static inline uint32_t LOAD_GENERAL(I_ARGS){return rs1 + imm;}
 //**************** STORE INSTRUCTIONS ***********************
 static inline uint32_t STORE_GENERAL(S_ARGS){return rs1 + imm;}
 
+//*************** BRANCH INSTRUCTIONS ***********************
+static inline uint32_t BEQ(R_ARGS) {return rs1 == rs2;}
+static inline uint32_t BNE(R_ARGS) {return rs1 != rs2;}
+static inline uint32_t BLT(R_ARGS) {return (int32_t)rs1 < (int32_t)rs2;}
+static inline uint32_t BGE(R_ARGS) {return (int32_t)rs1 >= (int32_t)rs2;}
+static inline uint32_t BLTU(R_ARGS) {return rs1 < rs2;}
+static inline uint32_t BGEU(R_ARGS) {return rs1 >= rs2;}
+
+//*************** JUMP INSTRUCTIONS *************************
+static inline uint32_t JAL() {return 0;}
+static inline uint32_t JALR() {return 0;}
+
 //*************** INSTRUCTION TABLES ************************
 static uint32_t (*R_MAP[10])(R_ARGS) = {ADD,SUB,SLT,SLU,XOR,SRL,SRA,OR,AND};
 static uint32_t (*IIMM_MAP[9])(I_ARGS) = {ADDI,SLLI,SLTI,SLTIU,XORI,SRLI,SRAI,ORI,ANDI};
-
+static uint32_t (*BRANCH_MAP[6])(R_ARGS) = {BEQ,BNE,BLT,BGE,BLTU,BGEU};
 
 //*************** HANDLERS **********************************
 static uint32_t r_handler(uint32_t funct3, uint32_t funct7){return R_MAP[funct3 + (funct3>5) + (funct7 >> 6)](EX_MEM.A,EX_MEM.B);}
@@ -367,6 +379,12 @@ static uint32_t iImm_handler(uint32_t funct3)
 }
 static uint32_t iL_handler(){return LOAD_GENERAL(EX_MEM.A,EX_MEM.imm);}
 static uint32_t s_handler(){return STORE_GENERAL(EX_MEM.A,EX_MEM.imm);}
+
+static uint32_t b_handler(uint32_t funct3)
+{
+	uint32_t offset = (funct3 > 4) * 3;
+	return BRANCH_MAP[funct3 - offset](EX_MEM.A,EX_MEM.B);
+}
 
 
 /************************************************************/
@@ -497,6 +515,9 @@ void EX()
 			break;
 		case(0x33): //register-register
 			EX_MEM.ALUOutput = r_handler(funct3, funct7);
+			break;
+		case(0x63):
+			EX_MEM.ALUOutput = b_handler(funct3);
 			break;
 		default:
 			break;
