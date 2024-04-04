@@ -450,7 +450,11 @@ void MEM()
 		}
 		case 0x23:{ //Store
 			mem_write_32(EX_MEM.ALUOutput,  EX_MEM.B);
+			MEM_WB.LMD = MEM_WB.ALUOutput; //enables forwarding from an earlier ALU output
 			break;
+		}
+		default: {
+			MEM_WB.LMD = MEM_WB.ALUOutput; //enables forwarding from an earlier ALU output
 		}
 	}
 }
@@ -461,45 +465,8 @@ void MEM()
 void EX()
 {
 	uint32_t opcode = opcode_get(ID_EX.IR),funct3 = funct3_get(ID_EX.IR), funct7 = funct7_get(ID_EX.IR);
-	uint32_t rs1 = ID_EX.rs1, rs2 = ID_EX.rs2;
-	uint32_t A,B;
 
-	//detect hazards
-	// get forwarding control values from forwarding unit
-	CURRENT_STATE.forwardA = forward_unit_A(rs1, rs2, EX_MEM.rd, MEM_WB.rd);
-	CURRENT_STATE.forwardB = forward_unit_B(rs1, rs2, EX_MEM.rd, MEM_WB.rd);
-
-	switch(CURRENT_STATE.forwardA){
-		case 1:
-			if (debug) printf("MEM hazard in operand A\n");
-			break;
-		case 2:
-			if (debug) printf("EX hazard in operand A\n");
-			break;
-	}
-	switch(CURRENT_STATE.forwardB){
-		case 1:
-			if (debug) printf("MEM hazard in operand B\n");
-			break;
-		case 2:
-			if (debug) printf("EX hazard in operand B\n");
-			break;
-	}
-
-	if(ENABLE_FORWARDING){	
-		//retrieve values for A and B from multiplexors depending on if forwarding is necessary
-		A = forward_mux_A(CURRENT_STATE.forwardA);
-		B = forward_mux_B(CURRENT_STATE.forwardB);
-
-		if (debug) printf("A: %d   B: %d \n", A, B);
-	} else {
-		A = CURRENT_STATE.REGS[rs1]; 
-		B = CURRENT_STATE.REGS[rs2];
-	}
-
-	ID_EX.A = A;
-	ID_EX.B = B;
-	EX_MEM = ID_EX; //it's important to forward before overwriting the EX_MEM register from the previous clock cycle
+	EX_MEM = ID_EX;
 
 
 	switch(opcode)
@@ -508,12 +475,14 @@ void EX()
 			EX_MEM.ALUOutput = iL_handler();
 			break;
 		case(0x13):
+			if (debug) printf("A: %d   imm: %d \n", EX_MEM.A, EX_MEM.imm);
 			EX_MEM.ALUOutput = iImm_handler(funct3);
 			break;
 		case(0x23):
 			EX_MEM.ALUOutput = s_handler();
 			break;
 		case(0x33): //register-register
+			if (debug) printf("A: %d   B: %d \n", EX_MEM.A, EX_MEM.B);
 			EX_MEM.ALUOutput = r_handler(funct3, funct7);
 			break;
 		case(0x63):
@@ -522,6 +491,8 @@ void EX()
 		default:
 			break;
 	}
+
+	if(debug) printf("ALU Output: %d\n", EX_MEM.ALUOutput);
 
 	// since there are no branch operations yet, we always increment the PC by 4.
 	// when we implement branches, we will use logic in the EX stage to determine NEXT_STATE.PC's value.
@@ -532,7 +503,7 @@ void EX()
 uint32_t forward_mux_A(uint8_t control){
 	switch(control) {
 		case 0:
-			return CURRENT_STATE.REGS[ID_EX.rs1];
+			return NEXT_STATE.REGS[ID_EX.rs1];
 		case 2:
 			if (debug) printf("Retrieving A from ALUOutput.\n");
 			return EX_MEM.ALUOutput;
@@ -546,7 +517,7 @@ uint32_t forward_mux_A(uint8_t control){
 uint32_t forward_mux_B(uint8_t control){
 	switch(control) {
 		case 0:
-			return CURRENT_STATE.REGS[ID_EX.rs2];
+			return NEXT_STATE.REGS[ID_EX.rs2];
 		case 2:
 			if (debug) printf("Retrieving B from ALUOutput.\n");
 			return EX_MEM.ALUOutput;
@@ -587,7 +558,41 @@ void ID()
 		CURRENT_STATE.PC -= 4;
 	}
 
+	//       FORWARDING
+	uint32_t A,B;
+	if(ENABLE_FORWARDING){	
+		//detect hazards
+		// get forwarding control values from forwarding unit
+		uint8_t forwardA = forward_unit_A(rs1, rs2, EX_MEM.rd, MEM_WB.rd); //indicates where to get first ALU operand from
+		uint8_t forwardB = forward_unit_B(rs1, rs2, EX_MEM.rd, MEM_WB.rd); //indicates where to get second ALU operand from
 
+		switch(forwardA){
+			case 1:
+				if(debug) printf("MEM hazard in operand A\n");
+				break;
+			case 2:
+				if(debug) printf("EX hazard in operand A\n");
+				break;
+		}
+		switch(forwardB){
+			case 1:
+				if(debug) printf("MEM hazard in operand B\n");
+				break;
+			case 2:
+				if(debug) printf("EX hazard in operand B\n");
+				break;
+		}
+		//retrieve values for A and B from multiplexors depending on if forwarding is necessary
+		A = forward_mux_A(forwardA);
+		B = forward_mux_B(forwardB);
+
+	} else {
+		A = NEXT_STATE.REGS[rs1]; 
+		B = NEXT_STATE.REGS[rs2];
+	}
+
+	ID_EX.A = A;
+	ID_EX.B = B;
 }
 
 
@@ -636,18 +641,21 @@ void show_pipeline(){
 IF/ID.IR: %s\n\
 IF/ID.PC: %d\n\n\
 ID/EX.IR: %s \n\
+ID/EX.rs1: %d\n\
+ID/EX.rs2: %d\n\
 ID/EX.A: %d\n\
 ID/EX.B: %d\n\
 ID/EX.imm: %d\n\n\
 EX/MEM.IR: %s\n\
 EX/MEM.A: %d\n\
 EX/MEM.B: %d\n\
-EX/MEM.ALU: %d\n\n\
+EX/MEM.imm: %d\n\
+EX/MEM.ALUOutput: %d\n\n\
 MEM/WB.IR: %s\n\
 MEM/WB.ALUOutput: %d\n\
-MEM/WB.LMD: %x\n",
-	CURRENT_STATE.PC, inst_to_string(IF_ID.IR), IF_ID.PC, inst_to_string(ID_EX.IR), ID_EX.A, ID_EX.B, ID_EX.imm,
-	inst_to_string(EX_MEM.IR), EX_MEM.A, EX_MEM.B, EX_MEM.ALUOutput, inst_to_string(MEM_WB.IR), MEM_WB.ALUOutput, MEM_WB.LMD);
+MEM/WB.LMD: %d\n",
+	CURRENT_STATE.PC, inst_to_string(IF_ID.IR), IF_ID.PC, inst_to_string(ID_EX.IR), ID_EX.rs1, ID_EX.rs2, ID_EX.A, ID_EX.B, ID_EX.imm,
+	inst_to_string(EX_MEM.IR), EX_MEM.A, EX_MEM.B, EX_MEM.imm, EX_MEM.ALUOutput, inst_to_string(MEM_WB.IR), MEM_WB.ALUOutput, MEM_WB.LMD);
 }
 
 /***************************************************************/
