@@ -511,7 +511,7 @@ void EX()
 		if(EX_MEM.ALUOutput) // if branch taken
 		{
 			flush(&IF_ID); //not sure if that's the right register to flush
-			NEXT_STATE.PC = 
+			//NEXT_STATE.PC = 
 		}
 		else //branch not taken
 		{
