@@ -45,8 +45,6 @@ typedef struct CPU_State_Struct {
   uint32_t PC;		                   /* program counter */
   uint32_t REGS[MIPS_REGS]; /* register file. */
   uint32_t HI, LO;                          /* special regs for mult/div. */
-  uint8_t forwardA;	//indicates where to get first ALU operand from
-  uint8_t forwardB; //indicates where to get second ALU operand from
 } CPU_State;
 
 typedef struct CPU_Pipeline_Reg_Struct{
