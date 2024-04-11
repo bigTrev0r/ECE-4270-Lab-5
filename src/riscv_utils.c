@@ -38,5 +38,5 @@ inline uint32_t opcode_get(uint32_t instruction)
 inline bool is_control(uint32_t inst)
 {
 	int opcode = opcode_get(inst);
-	return opcode == 203 || opcode == 111 || opcode == 0x63;
+	return opcode == 103 || opcode == 111 || opcode == 99;
 }

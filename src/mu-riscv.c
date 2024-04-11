@@ -243,6 +243,10 @@ void handle_command() {
 			ENABLE_FORWARDING ^= true;
 			ENABLE_FORWARDING ? printf("Forwarding ON\n") : printf("Forwarding OFF\n");
 			break;
+		case 'd':
+			debug = !debug;
+			debug ? printf("debug ON\n") : printf("debug OFF\n");
+			break;
 		default:
 			printf("Invalid Command.\n");
 			break;
@@ -511,7 +515,7 @@ void EX()
 		if(EX_MEM.ALUOutput) // if branch taken
 		{
 			flush(&IF_ID); //not sure if that's the right register to flush
-			//NEXT_STATE.PC = 
+			NEXT_STATE.PC = CURRENT_STATE.PC + EX_MEM.imm;
 		}
 		else //branch not taken
 		{
@@ -580,14 +584,7 @@ void ID()
 	if( !ENABLE_FORWARDING && 
 			((temp_reg = rd_get(EX_MEM.IR)) || (temp_reg = rd_get(MEM_WB.IR))) && (temp_reg == rs1 || temp_reg == rs2))
 	{
-		ID_EX = ZERO;
-		NEXT_STATE.PC -= 4;
-		CURRENT_STATE.PC -= 4;
-	}
-
-	//	control hazards
-	if(is_control(temp_inst)){
-		//stall 1 cycle
+		if(debug) printf("Data hazard detected; stalling\n");
 		ID_EX = ZERO;
 		NEXT_STATE.PC -= 4;
 		CURRENT_STATE.PC -= 4;
@@ -628,6 +625,13 @@ void ID()
 
 	ID_EX.A = A;
 	ID_EX.B = B;
+
+	//	control hazards
+	if(is_control(temp_inst)){
+		if(debug)
+			printf("Control hazard detected; stalling.\n");
+	}
+	NEXT_STATE.IF_control = !is_control(temp_inst); //stall 1 cycle
 }
 
 
@@ -637,9 +641,10 @@ void ID()
 /************************************************************/
 void IF()
 {
-	IF_ID.PC = CURRENT_STATE.PC;	
-	IF_ID.IR = mem_read_32(IF_ID.PC);
-
+	if(CURRENT_STATE.IF_control){
+		IF_ID.PC = CURRENT_STATE.PC;	
+		IF_ID.IR = mem_read_32(IF_ID.PC);
+	}
 }
 
 
@@ -649,6 +654,7 @@ void IF()
 void initialize() {
 	init_memory();
 	CURRENT_STATE.PC = MEM_TEXT_BEGIN;
+	CURRENT_STATE.IF_control = TRUE;
 	NEXT_STATE = CURRENT_STATE;
 	RUN_FLAG = TRUE;
 }

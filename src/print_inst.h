@@ -10,3 +10,4 @@ char* R_print(uint32_t rd, uint32_t f3, uint32_t rs1,uint32_t rs2,uint32_t f7);
 char* ILoad_print(uint32_t rd, uint32_t f3, uint32_t rs1, uint32_t imm);
 char* Iimm_print(uint32_t rd, uint32_t f3, uint32_t rs1, uint32_t imm);
 char* S_print(uint32_t imm4, uint32_t f3, uint32_t rs1, uint32_t rs2, uint32_t imm11);
+char* J_print(uint32_t imm);

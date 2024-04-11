@@ -8,7 +8,7 @@ int digits(int number) {
 
 
 char* inst_to_string(uint32_t args){
-	uint8_t type = (uint8_t)(args & 0x3f);
+	uint8_t type = (uint8_t)(args & 0x7f);
 	switch(type)
 	{
 		case(0x03): //IL
@@ -26,6 +26,15 @@ char* inst_to_string(uint32_t args){
 		case(0x33): //R
 		{
 			return R_print(rd_get(args) , funct3_get(args), rs1_get(args) , rs2_get(args), funct7_get(args));
+		}
+		case(99): //B
+		{
+			return "branch";
+		}
+		case(103):{}
+		case(111): //jump
+		{
+			return "jump";
 		}
 		default:
 			return 0;
@@ -232,4 +241,8 @@ char* S_print(uint32_t imm4, uint32_t f3, uint32_t rs1, uint32_t rs2, uint32_t i
 
     sprintf(inst, "%s x%u %u(x%u)",arg_string,rs2,imm,rs1);
     return inst;
+}
+
+char* J_print(uint32_t imm){
+	return "jump";
 }

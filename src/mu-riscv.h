@@ -1,7 +1,5 @@
 #include <stdint.h>
 
-#define debug FALSE //enable debug print statements
-
 #define FALSE 0
 #define TRUE  1
 
@@ -45,6 +43,7 @@ typedef struct CPU_State_Struct {
   uint32_t PC;		                   /* program counter */
   uint32_t REGS[MIPS_REGS]; /* register file. */
   uint32_t HI, LO;                          /* special regs for mult/div. */
+  bool IF_control;
 } CPU_State;
 
 typedef struct CPU_Pipeline_Reg_Struct{
@@ -118,3 +117,5 @@ void print_program(); /*IMPLEMENT THIS*/
 
 uint32_t forward_mux_A(uint8_t control);
 uint32_t forward_mux_B(uint8_t control);
+
+bool debug = FALSE;
