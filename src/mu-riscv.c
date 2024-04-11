@@ -402,6 +402,11 @@ void handle_pipeline()
 	IF();
 }
 
+inline void flush(CPU_Pipeline_Reg* reg)
+{
+	*reg = ZERO;
+}
+
 /************************************************************/
 /* writeback (WB) pipeline stage:                                                                          */
 /************************************************************/
@@ -494,9 +499,13 @@ void EX()
 
 	if(debug) printf("ALU Output: %d\n", EX_MEM.ALUOutput);
 
-	// since there are no branch operations yet, we always increment the PC by 4.
-	// when we implement branches, we will use logic in the EX stage to determine NEXT_STATE.PC's value.
-	NEXT_STATE.PC = CURRENT_STATE.PC + 4;
+	if(is_control(opcode)){
+		// use logic in the EX stage to determine NEXT_STATE.PC's value.
+	}
+	else{
+		//if the instruction is not a control instruction (ie. branch or jump) always increment the PC by 4
+		NEXT_STATE.PC = CURRENT_STATE.PC + 4;
+	}
 
 }
 
@@ -533,6 +542,7 @@ uint32_t forward_mux_B(uint8_t control){
 /* instruction decode (ID) pipeline stage:                                                         */
 /************************************************************/
 
+
 void ID()
 {
 	ID_EX = IF_ID;
@@ -556,6 +566,11 @@ void ID()
 		ID_EX = ZERO;
 		NEXT_STATE.PC -= 4;
 		CURRENT_STATE.PC -= 4;
+	}
+
+	//	control hazards
+	if(is_control(temp_inst)){
+		//stall 1 cycle
 	}
 
 	//       FORWARDING
