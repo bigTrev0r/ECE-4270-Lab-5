@@ -508,6 +508,15 @@ void EX()
 
 	if(is_control(opcode)){
 		// use logic in the EX stage to determine NEXT_STATE.PC's value.
+		if(EX_MEM.ALUOutput) // if branch taken
+		{
+			flush(&IF_ID); //not sure if that's the right register to flush
+			NEXT_STATE.PC = 
+		}
+		else //branch not taken
+		{
+			NEXT_STATE.PC = CURRENT_STATE.PC + 4;
+		}	
 	}
 	else{
 		//if the instruction is not a control instruction (ie. branch or jump) always increment the PC by 4
@@ -567,6 +576,7 @@ void ID()
 	
 	uint32_t temp_reg;
 
+	// may need to add the RegWrite condition to this if statement
 	if( !ENABLE_FORWARDING && 
 			((temp_reg = rd_get(EX_MEM.IR)) || (temp_reg = rd_get(MEM_WB.IR))) && (temp_reg == rs1 || temp_reg == rs2))
 	{
@@ -578,6 +588,9 @@ void ID()
 	//	control hazards
 	if(is_control(temp_inst)){
 		//stall 1 cycle
+		ID_EX = ZERO;
+		NEXT_STATE.PC -= 4;
+		CURRENT_STATE.PC -= 4;
 	}
 
 	//       FORWARDING
