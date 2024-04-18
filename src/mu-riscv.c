@@ -77,7 +77,7 @@ void cycle() {
 	handle_pipeline();
 	CURRENT_STATE = NEXT_STATE;
 	CYCLE_COUNT++;
-	//if(CURRENT_STATE.PC > (PROGRAM_SIZE * 4) + MEM_TEXT_BEGIN) RUN_FLAG = false;  //this line would end the program before the final instruction finished
+	if(NEXT_STATE.PC > ((PROGRAM_SIZE + 1) * 4) + MEM_TEXT_BEGIN) RUN_FLAG = false;  //this line would end the program before the final instruction finished
 }
 
 /***************************************************************/
@@ -367,7 +367,6 @@ static inline uint32_t BGEU(B_ARGS) {return rs1 >= rs2;}
 
 //*************** JUMP INSTRUCTIONS *************************
 static inline uint32_t JAL(uint32_t pc) {return pc+EX_MEM.imm;}
-static inline uint32_t JALR(I_ARGS) {return rs1 + imm;}
 
 //*************** INSTRUCTION TABLES ************************
 static uint32_t (*R_MAP[10])(R_ARGS) = {ADD,SUB,SLT,SLU,XOR,SRL,SRA,OR,AND};
@@ -385,11 +384,18 @@ static uint32_t iImm_handler(uint32_t funct3)
 static uint32_t iL_handler(){return LOAD_GENERAL(EX_MEM.A,EX_MEM.imm);}
 static uint32_t s_handler(){return STORE_GENERAL(EX_MEM.A,EX_MEM.imm);}
 
+static inline uint32_t _bit2_cast(uint32_t imm)
+{
+	int8_t lo = (int8_t)imm & 0xff;
+	int8_t hi = (int8_t)(imm & 0xf00 >> 8);
+	int8_t mask = (int32_t)(lo + (hi << 8));
+	return mask;
+}
 static uint32_t b_handler(uint32_t funct3)
 {
-	uint32_t offset = (funct3 > 4) * 3;
+	uint32_t offset = (funct3 >= 4) * 2;
 	uint32_t branch = BRANCH_MAP[funct3 - offset](EX_MEM.A,EX_MEM.B);
-	return CURRENT_STATE.PC + (EX_MEM.imm * branch);
+	return CURRENT_STATE.PC + (_bit2_cast(EX_MEM.imm) * branch);
 }
 
 /************************************************************/
@@ -439,8 +445,8 @@ void WB()
 			}
 		}
 
-		INSTRUCTION_COUNT++;
-		if(INSTRUCTION_COUNT >= PROGRAM_SIZE) RUN_FLAG = FALSE;
+		//INSTRUCTION_COUNT++;
+		//if(INSTRUCTION_COUNT >= PROGRAM_SIZE) RUN_FLAG = FALSE;
 	}
 }
 
@@ -514,12 +520,16 @@ void EX()
 		// use logic in the EX stage to determine NEXT_STATE.PC's value.
 		if(EX_MEM.ALUOutput) // if branch taken
 		{
-			flush(&IF_ID); //not sure if that's the right register to flush
-			NEXT_STATE.PC = CURRENT_STATE.PC + EX_MEM.imm;
+			flush(&ID_EX); //not sure if that's the right register to flush
+			CURRENT_STATE.IF_control = 1; //stall 1 cycle
+			
+
+			NEXT_STATE.PC = EX_MEM.ALUOutput - 4;
 		}
 		else //branch not taken
 		{
 			NEXT_STATE.PC = CURRENT_STATE.PC + 4;
+			CURRENT_STATE.IF_control = 0;
 		}	
 	}
 	else{
@@ -630,8 +640,9 @@ void ID()
 	if(is_control(temp_inst)){
 		if(debug)
 			printf("Control hazard detected; stalling.\n");
+		//CURRENT_STATE.PC = 0;
+		
 	}
-	NEXT_STATE.IF_control = !is_control(temp_inst); //stall 1 cycle
 }
 
 
