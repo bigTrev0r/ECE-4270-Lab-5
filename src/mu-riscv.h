@@ -57,6 +57,7 @@ typedef struct CPU_Pipeline_Reg_Struct{
 	uint32_t rs1; //register number 1
 	uint32_t rs2; //register number 2
 	uint32_t rd; //destination register number
+	uint32_t linked_pc; //for passing previous pc to WB after a jump and link
 	bool RegWrite; //indicates if the instruction writes to a register
 	
 } CPU_Pipeline_Reg;

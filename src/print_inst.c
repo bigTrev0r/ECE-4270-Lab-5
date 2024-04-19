@@ -1,13 +1,16 @@
 #include "print_inst.h"
 #include "riscv_utils.h"
 
+#include <string.h>
+
 
 int digits(int number) {
    	return number ? (int)(log10(number) + 1) : 0;
 }
 
 
-char* inst_to_string(uint32_t args){
+
+char * inst_to_string(uint32_t args){
 	uint8_t type = (uint8_t)(args & 0x7f);
 	switch(type)
 	{
@@ -17,7 +20,7 @@ char* inst_to_string(uint32_t args){
 		}
 		case(0x13): //Iimm
 		{
-			return Iimm_print(rd_get(args) , funct3_get(args) , rs1_get(args) , bigImm_get(args));
+			return Iimm_print(opcode_get(args),rd_get(args) , funct3_get(args) , rs1_get(args) , bigImm_get(args));
 		}
 		case(0x23): //S 
 		{
@@ -29,12 +32,15 @@ char* inst_to_string(uint32_t args){
 		}
 		case(99): //B
 		{
-			return "branch";
+			return B_print(funct3_get(args),rs1_get(args),rs2_get(args),get_b_imm(args));
 		}
-		case(103):{}
-		case(111): //jump
+		case(103): //jump
 		{
-			return "jump";
+			return Iimm_print(opcode_get(args), rd_get(args) , funct3_get(args) , rs1_get(args) , bigImm_get(args));
+		}
+		case(111):
+		{
+			return J_print(rd_get(args),get_j_imm(args));
 		}
 		default:
 			return 0;
@@ -138,7 +144,7 @@ char* ILoad_print(uint32_t rd, uint32_t f3, uint32_t rs1, uint32_t imm) {
     return inst;
 }
 
-char* Iimm_print(uint32_t rd, uint32_t f3, uint32_t rs1, uint32_t imm)
+char* Iimm_print(uint32_t opcode, uint32_t rd, uint32_t f3, uint32_t rs1, uint32_t imm)
 {
 	uint32_t imm0_4 = (imm << 7) >> 7;
 	uint32_t imm5_11 = imm >> 5;
@@ -148,6 +154,7 @@ char* Iimm_print(uint32_t rd, uint32_t f3, uint32_t rs1, uint32_t imm)
 	{
 	case 0: //addi
 		arg_string = "addi";
+		if(opcode == 0x63) arg_string = "jalr";
 		break;
 
 	case 4: //xori
@@ -243,6 +250,29 @@ char* S_print(uint32_t imm4, uint32_t f3, uint32_t rs1, uint32_t rs2, uint32_t i
     return inst;
 }
 
-char* J_print(uint32_t imm){
-	return "jump";
+const char * b_argname_map[6] = {"beq","bne","blt","bge","bltu","bgeu"};
+
+char * B_print(uint32_t funct3, uint32_t rs1, uint32_t rs2, uint32_t imm)
+{
+	imm = _bit2_cast(imm);
+	int32_t offset = (funct3 >= 4) << 1;
+	char * arg_string = strdup(b_argname_map[funct3 - offset]);
+	char * inst = malloc(255);
+	sprintf(inst,"%s x%u, x%u, %d",arg_string,rs1,rs2,imm);
+
+	free(arg_string);
+	return inst;
+}
+
+char* J_print(uint32_t rd, uint32_t imm){
+	imm = _bit2_cast(imm);
+	char * arg_string;
+	
+	arg_string = "jal";
+
+	char * inst = malloc(255);
+	sprintf(inst, "%s x%u, %d",arg_string,rd,imm); 
+	
+	return inst;
+
 }

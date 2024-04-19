@@ -325,7 +325,7 @@ void load_program() {
 #define I_ARGS uint32_t rs1, int32_t imm
 #define S_ARGS uint32_t rs1, int32_t imm
 #define B_ARGS uint32_t rs1, uint32_t rs2
-#define J_ARGS uint32_t temp_pc
+
 
 //***************** R TYPE INSTRUCTIONS **********************
 static inline uint32_t ADD(R_ARGS){return rs1 + rs2;}
@@ -340,7 +340,7 @@ static inline uint32_t SLT(R_ARGS){return (rs1 < rs2);}
 static inline uint32_t SLU(R_ARGS){return (rs1 < rs2);}//TODO: zero extends, leaving for now similar to last one. I figure these little things can be one of the last things we do - Trevor
 
 //**************** I IMMEDIATE INSTRUCTIONS *****************
-static inline uint32_t ADDI(I_ARGS){return rs1 + imm;}
+static inline uint32_t ADDI(I_ARGS){return rs1 + _bit2_cast(imm);}
 static inline uint32_t XORI(I_ARGS){return rs1 ^ imm;}
 static inline uint32_t 	ORI(I_ARGS){return rs1 | imm;}
 static inline uint32_t ANDI(I_ARGS){return rs1 & imm;}
@@ -352,10 +352,10 @@ static inline uint32_t SLTIU(I_ARGS){return rs1 < imm;}//TODO: zero extends
 
 
 //**************** LOAD INSTRUCTIONS ************************
-static inline uint32_t LOAD_GENERAL(I_ARGS){return rs1 + imm;}
+static inline uint32_t LOAD_GENERAL(I_ARGS){return rs1 + _bit2_cast(imm);}
 
 //**************** STORE INSTRUCTIONS ***********************
-static inline uint32_t STORE_GENERAL(S_ARGS){return rs1 + imm;}
+static inline uint32_t STORE_GENERAL(S_ARGS){return rs1 + _bit2_cast(imm);}
 
 //*************** BRANCH INSTRUCTIONS ***********************
 static inline uint32_t BEQ(B_ARGS) {return (rs1 == rs2);}
@@ -366,7 +366,7 @@ static inline uint32_t BLTU(B_ARGS) {return rs1 < rs2;}
 static inline uint32_t BGEU(B_ARGS) {return rs1 >= rs2;}
 
 //*************** JUMP INSTRUCTIONS *************************
-static inline uint32_t JAL(uint32_t pc) {return pc+EX_MEM.imm;}
+static inline uint32_t JAL(uint32_t pc) {return pc + _bit2_cast(EX_MEM.imm);}
 
 //*************** INSTRUCTION TABLES ************************
 static uint32_t (*R_MAP[10])(R_ARGS) = {ADD,SUB,SLT,SLU,XOR,SRL,SRA,OR,AND};
@@ -384,18 +384,11 @@ static uint32_t iImm_handler(uint32_t funct3)
 static uint32_t iL_handler(){return LOAD_GENERAL(EX_MEM.A,EX_MEM.imm);}
 static uint32_t s_handler(){return STORE_GENERAL(EX_MEM.A,EX_MEM.imm);}
 
-static inline uint32_t _bit2_cast(uint32_t imm)
-{
-	int8_t lo = (int8_t)imm & 0xff;
-	int8_t hi = (int8_t)(imm & 0xf00 >> 8);
-	int8_t mask = (int32_t)(lo + (hi << 8));
-	return mask;
-}
 static uint32_t b_handler(uint32_t funct3)
 {
 	uint32_t offset = (funct3 >= 4) * 2;
 	uint32_t branch = BRANCH_MAP[funct3 - offset](EX_MEM.A,EX_MEM.B);
-	return CURRENT_STATE.PC + (_bit2_cast(EX_MEM.imm) * branch);
+	return (CURRENT_STATE.PC + _bit2_cast(EX_MEM.imm) - 4) * branch;
 }
 
 /************************************************************/
@@ -403,9 +396,6 @@ static uint32_t b_handler(uint32_t funct3)
 /************************************************************/
 void handle_pipeline()
 {
-	/*INSTRUCTION_COUNT should be incremented when instruction is done*/
-	/*Since we do not have branch/jump instructions, INSTRUCTION_COUNT should be incremented in WB stage */
-
 	WB();
 	MEM();
 	EX();
@@ -431,6 +421,12 @@ void WB()
 		int rd = rd_get(inst); //destination register
 
 		switch(opcode){
+			//linking on jump
+			case 0x6f:
+			case 0x67:
+				NEXT_STATE.REGS[rd] = MEM_WB.linked_pc;
+				break;
+
 			case 51:{ //register-register instruction
 				NEXT_STATE.REGS[rd] = alu;
 				break;
@@ -502,12 +498,14 @@ void EX()
 			EX_MEM.ALUOutput = r_handler(funct3, funct7);
 			break;
 		case(0x63):
+			EX_MEM.imm = get_b_imm(ID_EX.IR);
 			EX_MEM.ALUOutput = b_handler(funct3);
 			break;
 		case(0x67):
 			EX_MEM.ALUOutput = iImm_handler(funct3);
 			break;
 		case(0x6f):
+			EX_MEM.imm = get_j_imm(EX_MEM.IR) * 2;
 			EX_MEM.ALUOutput = JAL(CURRENT_STATE.PC);
 			break;
 		default:
@@ -520,8 +518,9 @@ void EX()
 		// use logic in the EX stage to determine NEXT_STATE.PC's value.
 		if(EX_MEM.ALUOutput) // if branch taken
 		{
-			flush(&ID_EX); //not sure if that's the right register to flush
+			flush(&IF_ID);
 			CURRENT_STATE.IF_control = 1; //stall 1 cycle
+			EX_MEM.linked_pc = CURRENT_STATE.PC + 4;
 			
 
 			NEXT_STATE.PC = EX_MEM.ALUOutput - 4;
@@ -577,6 +576,7 @@ void ID()
 {
 	ID_EX = IF_ID;
 	
+
 	uint32_t temp_inst = IF_ID.IR;
 	uint32_t rs1 = rs1_get(temp_inst);
 	uint32_t rs2 = rs2_get(temp_inst);
@@ -584,8 +584,10 @@ void ID()
 	ID_EX.rs1 = rs1;
 	ID_EX.rs2 = rs2;
 	ID_EX.RegWrite = regWrite(temp_inst);
+
 	if(ID_EX.RegWrite) ID_EX.rd = rd_get(temp_inst);
 	else ID_EX.rd = 0;
+
 	ID_EX.imm = bigImm_get(temp_inst);
 	
 	uint32_t temp_reg;
@@ -678,7 +680,9 @@ void print_program(){
 
 	while(i < PROGRAM_SIZE){
 		uint32_t instruction = mem_read_32(temp_pc);
-		printf("%s\n", inst_to_string(instruction));
+		char * istr = inst_to_string(instruction);
+		printf("%s\n", istr);
+		free(istr);
 		temp_pc += 4;
 		i++;
 		//exit loop at some point
